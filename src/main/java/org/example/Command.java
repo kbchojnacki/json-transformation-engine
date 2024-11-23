@@ -1,6 +1,5 @@
 package org.example;
 
-import java.util.Arrays;
 
 public enum Command {
     // Navigation commands
@@ -33,6 +32,8 @@ public enum Command {
     DUPLICATE_VALUE,    // Duplicate top values on value stack
     SWAP_VALUES,        // Swap top two values on value stack
     ROTATE_VALUES,      // Rotate top three values on value stack
+    ELEMENT_TO_VALUE,   // Move top element from element stack to value stack
+    VALUE_TO_ELEMENT,   // Move top element from value stack to element stack
 
     // Control flow
     PUSH_COMMAND,         // Push commands onto command stack

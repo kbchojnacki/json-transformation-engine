@@ -51,8 +51,10 @@ public class ValueStackReference {
         if (field == null) {
             throw new IllegalStateException("Field reference with null field name");
         }
-
         JsonNode currentState = machine.getCurrentState();
+        if (!currentState.has(field)) {
+            throw new IllegalStateException("Field '" + field + "' does not exist in current state");
+        }
         if (currentState.has(field)) {
             JsonNode fieldValue = currentState.get(field);
             if (fieldValue.isNumber()) {

@@ -252,4 +252,38 @@ class JsonTransformationMachineTest {
             assertEquals("item1", result.get(0).asText());
         }
     }
+
+    @Test
+    void testSimpleMove() throws Exception {
+        String jsonString = "{ \"name\": \"Alice\" }";
+        JsonNode inputJson = mapper.readTree(jsonString);
+
+        List<Instruction> instructions = JsonPathTransformer.generateMoveInstructions("$.name", "$.user.name",null);
+
+        JsonTransformationMachine machine = new JsonTransformationMachine(inputJson);
+        JsonNode result = machine.execute(instructions);
+
+        assertNotNull(result.get("user"));
+        assertEquals("Alice", result.get("user").get("name").asText());
+    }
+
+    @Test
+    void testArrayReplication() throws Exception {
+        String jsonString = "{ \"users\": [\"Alice\", \"Bob\"], \"messages\": [] }";
+        JsonNode inputJson = mapper.readTree(jsonString);
+
+        List<Instruction> instructions = JsonPathTransformer.generateMoveInstructions("$.users[*]", "$.messages[*].user",null);
+
+        JsonTransformationMachine machine = new JsonTransformationMachine(inputJson);
+        JsonNode result = machine.execute(instructions);
+
+        JsonNode messages = result.get("messages");
+        assertNotNull(messages);
+        assertTrue(messages.isArray());
+        assertEquals(2, messages.size());
+        assertEquals("Alice", messages.get(0).get("user").asText());
+        assertEquals("Bob", messages.get(1).get("user").asText());
+    }
+
+
 }

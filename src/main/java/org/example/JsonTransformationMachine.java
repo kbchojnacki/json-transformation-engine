@@ -85,7 +85,12 @@ public class JsonTransformationMachine {
                     break;
                 case DUPLICATE_ELEMENT:
                     if (!stacks.elements().isEmpty()) {
-                        stacks.elements().push(stacks.elements().peek().deepCopy());
+                        JsonNode topElement = stacks.elements().peek();
+                        if (topElement != null) {
+                            stacks.elements().push(topElement.deepCopy());
+                        } else {
+                            stacks.elements().push(null);
+                        }
                     }
                     break;
                 case SWAP_ELEMENTS:
@@ -108,10 +113,12 @@ public class JsonTransformationMachine {
                     break;
                 case MAP_ELEMENT:
                     @SuppressWarnings("unchecked")
-                    Map<String,JsonNode> mapping = (Map<String,JsonNode>) (instruction.getParams()[0]);
+                    Map<String, JsonNode> mapping = (Map<String, JsonNode>) (instruction.getParams()[0]);
                     if (!stacks.elements().isEmpty()) {
                         JsonNode val = stacks.elements().pop();
-                        stacks.elements().push(mapping.getOrDefault(val.textValue(),val).deepCopy());
+                        Object key = unwrap(val);
+                        JsonNode mappedValue = mapping.getOrDefault(key, val).deepCopy();
+                        stacks.elements().push(mappedValue);
                     }
                     break;
                 // Value stack operations
@@ -183,6 +190,18 @@ public class JsonTransformationMachine {
                         stacks.values().push(bottom);
                     }
                     break;
+                case ELEMENT_TO_VALUE:
+                    if(!stacks.elements().isEmpty()) {
+                        JsonNode top = stacks.elements().pop();
+                        stacks.values().push(unwrap(top));
+                    }
+                    break;
+                case VALUE_TO_ELEMENT:
+                    if(!stacks.values().isEmpty()) {
+                        Object top = stacks.values().pop();
+                        stacks.elements().push(mapper.valueToTree(top));
+                    }
+                    break;
                 // Control flow
                 case PUSH_COMMAND:
                     @SuppressWarnings("unchecked")
@@ -201,17 +220,20 @@ public class JsonTransformationMachine {
                 case JUMP_IF_TRUE:
                     if (!stacks.values().isEmpty()) {
                         Object val = stacks.values().pop();
-                        if (Boolean.TRUE.equals(val) || !Integer.valueOf(0).equals(val)) {
+                        boolean con = (val instanceof Boolean && (Boolean) val)
+                                || (val instanceof Number && ((Number) val).doubleValue() != 0);
+                        if (con) {
                             executeInstruction((Instruction) instruction.getParams()[0]);
                         }
                     }
                     break;
                 case JUMP_IF_FALSE:
-                    if (!stacks.values().isEmpty()) {
-                        Object val = stacks.values().pop();
-                        if (Boolean.FALSE.equals(val) || Integer.valueOf(0).equals(val)) {
-                            executeInstruction((Instruction) instruction.getParams()[0]);
-                        }
+                    Object val = stacks.values().pop();
+                    boolean con = (val == null)
+                            || (val instanceof Boolean && !(Boolean) val)
+                            || (val instanceof Number && ((Number) val).doubleValue() == 0);
+                    if (con) {
+                        executeInstruction((Instruction) instruction.getParams()[0]);
                     }
                     break;
                 case RESET:
@@ -506,6 +528,20 @@ public class JsonTransformationMachine {
         }
     }
 
+    private Object unwrap(JsonNode node) {
+        if(node.isTextual()) {
+            return node.asText();
+        }else if(node.isNumber()) {
+            return node.numberValue();
+        }else if(node.isBoolean()) {
+            return node.asBoolean();
+        }else if(node.isNull()) {
+            return null;
+        }else {
+            return node;
+        }
+    }
+
     // Structure modification methods
     private void mergeObjects() {
         if (stacks.elements().size() < 2) {
@@ -546,12 +582,8 @@ public class JsonTransformationMachine {
             ArrayNode array = (ArrayNode) immediateParent;
             int index = getCurrentArrayIndex(); // Use current path's index
 
-            if (index >= 0) { // Check if we have a valid index
-                if (element.isValueNode()) {
-                    array.set(index, element);
-                } else {
-                    array.set(index, element);
-                }
+            if (index >= 0) {
+                array.set(index, element);
             } else {
                 throw new IllegalStateException(
                         "Cannot determine array index from path: " + currentPath
@@ -603,13 +635,12 @@ public class JsonTransformationMachine {
     }
 
     private String getCurrentField() {
-        if (currentPath.lastIndexOf('.') < currentPath.lastIndexOf("[")) {
-            return currentPath.substring(
-                    currentPath.lastIndexOf('.', currentPath.lastIndexOf('[')) + 1,
-                    currentPath.lastIndexOf('[')
-            );
+        String[] parts = currentPath.split("\\.|\\[\\d+\\]");
+        if (parts.length > 0) {
+            return parts[parts.length - 1];
+        } else {
+            throw new IllegalStateException("Invalid current path: " + currentPath);
         }
-        return currentPath.substring(currentPath.lastIndexOf('.') + 1);
     }
 
 
@@ -686,4 +717,7 @@ public class JsonTransformationMachine {
         }
     }
 
+    public StackManager getStackManager() {
+        return stacks;
+    }
 }
