@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
@@ -24,7 +25,7 @@ class JsonTransformationMachineTest {
     void setUp() {
         mapper = new ObjectMapper();
         testData = createTestData();
-        machine = new JsonTransformationMachine(testData,true);
+        machine = new JsonTransformationMachine(testData, true);
     }
 
     private ObjectNode createTestData() {
@@ -213,7 +214,7 @@ class JsonTransformationMachineTest {
                     // Create first array
                     Instruction.of(Command.MOVE_INTO_ARRAY, "array1"),
                     Instruction.of(Command.MOVE_INTO_INDEX, 0),
-                    Instruction.of(Command.MOVE_INTO_FIELD,"value"),
+                    Instruction.of(Command.MOVE_INTO_FIELD, "value"),
                     Instruction.of(Command.STORE_ELEMENT, mapper.readTree("\"first\"")),
                     Instruction.of(Command.MOVE_OUT),
                     Instruction.of(Command.MOVE_OUT),
@@ -223,7 +224,7 @@ class JsonTransformationMachineTest {
                     Instruction.of(Command.MOVE_TO_ROOT),
                     Instruction.of(Command.MOVE_INTO_ARRAY, "array2"),
                     Instruction.of(Command.MOVE_INTO_INDEX, 0),
-                    Instruction.of(Command.MOVE_INTO_FIELD,"value"),
+                    Instruction.of(Command.MOVE_INTO_FIELD, "value"),
                     Instruction.of(Command.STORE_ELEMENT, mapper.readTree("\"second\"")),
                     Instruction.of(Command.MOVE_OUT),
                     Instruction.of(Command.MOVE_OUT),
@@ -258,7 +259,7 @@ class JsonTransformationMachineTest {
         String jsonString = "{ \"name\": \"Alice\" }";
         JsonNode inputJson = mapper.readTree(jsonString);
 
-        List<Instruction> instructions = JsonPathTransformer.generateMoveInstructions("$.name", "$.user.name",null);
+        List<Instruction> instructions = JsonPathTransformer.generateMoveInstructions("$.name", "$.user.name", null);
 
         JsonTransformationMachine machine = new JsonTransformationMachine(inputJson);
         JsonNode result = machine.execute(instructions);
@@ -272,7 +273,7 @@ class JsonTransformationMachineTest {
         String jsonString = "{ \"users\": [\"Alice\", \"Bob\"], \"messages\": [] }";
         JsonNode inputJson = mapper.readTree(jsonString);
 
-        List<Instruction> instructions = JsonPathTransformer.generateMoveInstructions("$.users[*]", "$.messages[*].user",null);
+        List<Instruction> instructions = JsonPathTransformer.generateMoveInstructions("$.users[*]", "$.messages[*].user", null);
 
         JsonTransformationMachine machine = new JsonTransformationMachine(inputJson);
         JsonNode result = machine.execute(instructions);
@@ -283,6 +284,30 @@ class JsonTransformationMachineTest {
         assertEquals(2, messages.size());
         assertEquals("Alice", messages.get(0).get("user").asText());
         assertEquals("Bob", messages.get(1).get("user").asText());
+    }
+
+    @Test
+    void testDatetimeFormatter() throws Exception {
+        String dateTime = "2024-12-12 17:32:12";
+        String format = "yyyy-MM-dd HH:mm:ss";
+        String newFormat = "yyyy-MM-dd HH:mm";
+        String jsonString = "{}";
+        JsonNode inputJson = mapper.readTree(jsonString);
+
+        List<Instruction> instructions = Arrays.asList(
+                Instruction.of(Command.STORE_VALUE, dateTime),
+                Instruction.of(Command.STORE_VALUE, format),
+                Instruction.of(Command.TO_TIMESTAMP),
+                Instruction.of(Command.STORE_VALUE, newFormat),
+                Instruction.of(Command.FORMAT_TIME),
+                Instruction.of(Command.VALUE_TO_ELEMENT),
+                Instruction.of(Command.MOVE_INTO_FIELD, "dateTime"),
+                Instruction.of(Command.POP_ELEMENT)
+        );
+
+        JsonTransformationMachine machine = new JsonTransformationMachine(inputJson);
+        JsonNode result = machine.execute(instructions);
+        assertEquals("2024-12-12 17:32",result.get("dateTime").asText());
     }
 
 

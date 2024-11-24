@@ -18,22 +18,31 @@ public enum Command {
     ROTATE_ELEMENTS,      // Rotate top three elements on element stack
     MAP_ELEMENT,          // Map top element on element stack
     STORE_ELEMENT,        // Store element at current location
+    COALESCE_ELEMENT,     // Coalesce n values on element stack
 
     // Value stack operations
-    STORE_VALUE,          // Store a value on the value stack
-    STORE_SIZE,          // store size of array on value stack
-    POP_VALUE,           // Pop a value from the value stack
-    INCREMENT,           // Increment top number on value stack
-    DECREMENT,           // Decrement top number on value stack
-    COMPARE,             // Compare top two values on stack
+    STORE_VALUE,        // Store a value on the value stack
+    STORE_SIZE,         // store size of array on value stack
+    POP_VALUE,          // Pop a value from the value stack
+    INCREMENT,          // Increment top number on value stack
+    DECREMENT,          // Decrement top number on value stack
+    COMPARE,            // Compare top two values on stack
     ADD,                // Add top two values on stack
-    SUBTRACT,                // Subtract top two values on stack
-    NEGATE,          // Negate top value on stack
+    SUBTRACT,           // Subtract top two values on stack
+    NEGATE,             // Negate top value on stack
     DUPLICATE_VALUE,    // Duplicate top values on value stack
     SWAP_VALUES,        // Swap top two values on value stack
     ROTATE_VALUES,      // Rotate top three values on value stack
     ELEMENT_TO_VALUE,   // Move top element from element stack to value stack
     VALUE_TO_ELEMENT,   // Move top element from value stack to element stack
+    MULTIPLY,           // Multiply top two values on stack
+    DIVIDE,             // Divide top two values on stack
+    MODULO,             // Modulo top two values on stack
+    FORMAT_TIME,        // Format unix timestamp on stack
+    TO_TIMESTAMP,       // Convert time to unix timestamp
+    COALESCE,           // Coalesce n values on value stack
+    CONCAT,             // Concat n values on value stack
+    IS_NULL,            // check if last value on value stack is null
 
     // Control flow
     PUSH_COMMAND,         // Push commands onto command stack

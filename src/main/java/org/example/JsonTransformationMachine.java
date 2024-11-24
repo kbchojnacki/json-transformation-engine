@@ -5,8 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.stream.IntStream;
+import java.util.stream.StreamSupport;
 
 public class JsonTransformationMachine {
     private static final int MAX_LOOP_ITERATIONS = 10000;
@@ -48,7 +55,7 @@ public class JsonTransformationMachine {
 
     private void executeInstruction(Instruction instruction) {
         if (debug) {
-            System.out.printf("Executing: %s at path: %s%n", instruction, currentPath);
+            System.out.printf("Executing %d: %s at path: %s%n", totalOperations, instruction, currentPath);
         }
 
         try {
@@ -81,7 +88,7 @@ public class JsonTransformationMachine {
                     setCurrentElement(stacks.elements().pop());
                     break;
                 case STORE_ELEMENT:
-                    setCurrentElement((JsonNode)instruction.getParams()[0]);
+                    stacks.elements().push((JsonNode) instruction.getParams()[0]);
                     break;
                 case DUPLICATE_ELEMENT:
                     if (!stacks.elements().isEmpty()) {
@@ -121,7 +128,23 @@ public class JsonTransformationMachine {
                         stacks.elements().push(mappedValue);
                     }
                     break;
-                // Value stack operations
+                case COALESCE_ELEMENT:
+                    if (!stacks.values().isEmpty()) {
+                        Integer val = (Integer) stacks.values().pop();
+                        if (stacks.elements().size() >= val) {
+                            List<JsonNode> elements = new ArrayList<>();
+                            for (int i = 0; i < val; i++) {
+                                elements.add(stacks.elements().pop());
+                            }
+                            elements.reversed()
+                                    .stream()
+                                    .filter(Objects::nonNull)
+                                    .filter(e -> !e.isNull())
+                                    .findFirst()
+                                    .ifPresent(e -> stacks.elements().push(e));
+                        }
+                    }
+                    // Value stack operations
                 case STORE_VALUE:
                     stacks.values().push(resolveValue(instruction.getParams()[0]));
                     break;
@@ -163,7 +186,74 @@ public class JsonTransformationMachine {
                         stacks.values().push(-val.intValue());
                     }
                     break;
-                // Size operations
+                case MULTIPLY:
+                    if (stacks.values().size() >= 2) {
+                        Number val2 = (Number) stacks.values().pop();
+                        Number val1 = (Number) stacks.values().pop();
+                        stacks.values().push(val1.intValue() * val2.intValue());
+                    }
+                    break;
+                case DIVIDE:
+                    if (stacks.values().size() >= 2) {
+                        Number val2 = (Number) stacks.values().pop();
+                        Number val1 = (Number) stacks.values().pop();
+                        stacks.values().push(val1.intValue() / val2.intValue());
+                    }
+                    break;
+                case MODULO:
+                    if (stacks.values().size() >= 2) {
+                        Number val2 = (Number) stacks.values().pop();
+                        Number val1 = (Number) stacks.values().pop();
+                        stacks.values().push(val1.intValue() % val2.intValue());
+                    }
+                    break;
+                case FORMAT_TIME:
+                    if (stacks.values().size() >= 2) {
+                        String format = (String) stacks.values().pop();
+                        Long timestamp = (Long) stacks.values().pop();
+                        Instant instant = Instant.ofEpochSecond(timestamp);
+                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern(format).withZone(ZoneOffset.UTC);
+                        stacks.values().push(formatter.format(instant));
+                    }
+                    break;
+                case TO_TIMESTAMP:
+                    if (stacks.values().size() >= 2) {
+                        String format = (String) stacks.values().pop();
+                        String dateTime = (String) stacks.values().pop();
+                        DateTimeFormatter formatter = DateTimeFormatter.
+                                ofPattern(format)
+                                .withZone(ZoneOffset.UTC);
+                        stacks.values().push(Instant.from(formatter.parse(dateTime)).toEpochMilli()/1000);
+                    }
+                    break;
+                case COALESCE:
+                    if (!stacks.values().isEmpty()) {
+                        Integer val = (Integer) stacks.values().pop();
+                        if (stacks.values().size() >= val) {
+                            List<Object> values = new ArrayList<>();
+                            for (int i = 0; i < val; i++) {
+                                values.add(stacks.values().pop());
+                            }
+                            values.reversed()
+                                    .stream()
+                                    .filter(Objects::nonNull)
+                                    .findFirst()
+                                    .ifPresent(e -> stacks.values().push(e));
+                        }
+                    }
+                    break;
+                case CONCAT:
+                    if (stacks.values().size() >= 2) {
+                        String val2 = (String) stacks.values().pop();
+                        String val1 = (String) stacks.values().pop();
+                        stacks.values().push(val1 + val2);
+                    }
+                    break;
+                case IS_NULL:
+                    if (!stacks.values().isEmpty()) {
+                        stacks.values().push(stacks.values().pop() != null);
+                    }
+                    // Size operations
                 case STORE_SIZE:
                     storeSize();
                     break;
@@ -191,13 +281,13 @@ public class JsonTransformationMachine {
                     }
                     break;
                 case ELEMENT_TO_VALUE:
-                    if(!stacks.elements().isEmpty()) {
+                    if (!stacks.elements().isEmpty()) {
                         JsonNode top = stacks.elements().pop();
                         stacks.values().push(unwrap(top));
                     }
                     break;
                 case VALUE_TO_ELEMENT:
-                    if(!stacks.values().isEmpty()) {
+                    if (!stacks.values().isEmpty()) {
                         Object top = stacks.values().pop();
                         stacks.elements().push(mapper.valueToTree(top));
                     }
@@ -344,6 +434,9 @@ public class JsonTransformationMachine {
         stacks.states().push(currentState);
 
         if (currentState instanceof ArrayNode) {
+            if (index < 0) {
+                index = currentState.size() + index;
+            }
             ArrayNode arrayNode = (ArrayNode) currentState;
             while (arrayNode.size() <= index) {
                 arrayNode.addObject();
@@ -529,15 +622,15 @@ public class JsonTransformationMachine {
     }
 
     private Object unwrap(JsonNode node) {
-        if(node.isTextual()) {
+        if (node.isTextual()) {
             return node.asText();
-        }else if(node.isNumber()) {
+        } else if (node.isNumber()) {
             return node.numberValue();
-        }else if(node.isBoolean()) {
+        } else if (node.isBoolean()) {
             return node.asBoolean();
-        }else if(node.isNull()) {
+        } else if (node.isNull()) {
             return null;
-        }else {
+        } else {
             return node;
         }
     }
